@@ -1,0 +1,54 @@
+name: Build Prism Settings APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          mkdir -p "$SDK/cmdline-tools"
+          SDKMANAGER="$(find "$SDK/cmdline-tools" -maxdepth 4 -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo 'Installing official Android command-line tools...'
+            curl --fail --location --retry 3 --output /tmp/android-cmdline-tools.zip \
+              'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip'
+            mkdir -p /tmp/prism-cmdline-tools
+            unzip -q /tmp/android-cmdline-tools.zip -d /tmp/prism-cmdline-tools
+            mkdir -p "$SDK/cmdline-tools/latest"
+            cp -a /tmp/prism-cmdline-tools/cmdline-tools/. "$SDK/cmdline-tools/latest/"
+            SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          chmod +x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null || test "${PIPESTATUS[1]}" -eq 0
+          "$SDKMANAGER" --sdk_root="$SDK" --install \
+            'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrismSettings-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
