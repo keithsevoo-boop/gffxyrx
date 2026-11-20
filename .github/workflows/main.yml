@@ -13,12 +13,11 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Checkout source code
+      - name: Checkout project
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -26,36 +25,31 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Check project files
-        shell: bash
+      - name: Show project files
         run: |
-          echo "Checking Prism Settings project..."
-          ls -la
-          test -f settings.gradle || test -f settings.gradle.kts
-          test -f gradlew
-          test -f gradle/wrapper/gradle-wrapper.jar
-          test -f gradle/wrapper/gradle-wrapper.properties
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
+          pwd
+          find . -maxdepth 3 -type f | sort
+          gradle --version
 
       - name: Build Prism Settings APK
-        shell: bash
         run: |
-          ./gradlew --no-daemon --stacktrace assembleDebug
+          gradle --no-daemon assembleDebug --stacktrace
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: PrismSettings-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: '**/build/outputs/apk/debug/*.apk'
           if-no-files-found: error
-          retention-days: 14
+
